@@ -1,11 +1,11 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import mean_squared_error, r2_score, confusion_matrix, accuracy_score
 import matplotlib.pyplot as plt
 
-def predict_linear(ticker, covid_data, stock_data, target_column='Close', threshold=0.01):
+def predict_linear(covid_data, stock_data, target_column='Close', threshold=0.01, n_splits=5):
     # Select only date and new_cases_smoothed from COVID data
     covid_data = covid_data[['date', 'new_cases_smoothed']]
 
@@ -23,45 +23,69 @@ def predict_linear(ticker, covid_data, stock_data, target_column='Close', thresh
     X = merged_data['new_cases_smoothed'].values.reshape(-1, 1)
     y = merged_data[target_column].values
 
-    # Split the data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Initialize KFold for cross-validation
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-    # Create and train the linear regression model
+    # Create the model
     model = LinearRegression()
-    model.fit(X_train, y_train)
 
-    # Make predictions
-    y_pred = model.predict(X_test)
+    # Cross-validation scores
+    mse_scores = []
+    r2_scores = []
+    accuracy_scores = []
 
-    # Calculate MSE and R-squared
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
+    # Loop over each fold
+    for train_index, test_index in kf.split(X):
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
 
-    # Calculate accuracy-like metric based on a threshold
-    error = np.abs(y_test - y_pred)  # Absolute error
-    correct_predictions = np.sum(error <= threshold * y_test)  # Predictions within threshold (e.g., 1%)
-    accuracy = correct_predictions / len(y_test)  # Proportion of correct predictions
+        # Train the model
+        model.fit(X_train, y_train)
 
-    # Visualize the results
-    plt.figure(figsize=(10, 6))
-    plt.scatter(X_test, y_test, color='blue', label='Actual Stock Price')
-    plt.plot(X_test, y_pred, color='red', label='Regression Line')
-    plt.title(f'COVID New Cases vs Stock Price - Linear Regression')
-    plt.xlabel('Smoothed New COVID Cases')
-    plt.ylabel('Stock Price')
-    plt.legend()
-    plt.show()
-    
-    # Print model performance metrics
-    print("Model Performance:")
-    print(f"Mean Squared Error: {mse}")
-    print(f"R-squared Score: {r2}")
-    print(f"Accuracy (within {threshold*100}% error): {accuracy * 100:.2f}%")
-    print(f"\nRegression Equation:")
-    print(f"Stock Price = {model.intercept_:.2f} + {model.coef_[0]:.4f} * New COVID Cases")
+        # Make predictions
+        y_pred = model.predict(X_test)
+
+        # Calculate MSE and R-squared
+        mse = mean_squared_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+
+        # Calculate accuracy-like metric based on a threshold
+        error = np.abs(y_test - y_pred)  # Absolute error
+        correct_predictions = np.sum(error <= threshold * y_test)  # Predictions within threshold
+        accuracy = correct_predictions / len(y_test)  # Proportion of correct predictions
+
+        # Append scores for each fold
+        mse_scores.append(mse)
+        r2_scores.append(r2)
+        accuracy_scores.append(accuracy)
+
+        # Average scores across all folds
+        avg_mse = np.mean(mse_scores)
+        avg_r2 = np.mean(r2_scores)
+        avg_accuracy = np.mean(accuracy_scores)
+
+        # Print the average model performance
+        print(f"Cross-Validation Results (over {n_splits} folds):")
+        print(f"Average Mean Squared Error: {avg_mse}")
+        print(f"Average R-squared Score: {avg_r2}")
+        print(f"Average Accuracy (within {threshold * 100}% error): {avg_accuracy * 100:.2f}%")
+
+        # Visualize the results for the last fold
+        plt.figure(figsize=(10, 6))
+        plt.scatter(X_test, y_test, color='blue', label='Actual Stock Price')
+        plt.plot(X_test, y_pred, color='red', label='Regression Line')
+        plt.title(f'COVID New Cases vs Stock Price - Linear Regression (Cross-Validation)')
+        plt.xlabel('Smoothed New COVID Cases')
+        plt.ylabel('Stock Price')
+        plt.legend()
+        plt.show()
+
+        # Print regression equation for the last fold
+        print(f"\nRegression Equation (last fold):")
+        print(f"Stock Price = {model.intercept_:.2f} + {model.coef_[0]:.4f} * New COVID Cases")
 
 
-def predict_logistic(ticker, covid_data, stock_data, target_column='Close'):
+def predict_logistic(covid_data, stock_data, target_column='Close'):
     # Select only date and new_cases_smoothed from COVID data
     covid_data = covid_data[['date', 'new_cases_smoothed']]
 
@@ -193,8 +217,8 @@ def main():
     stock_data['Date'] = pd.to_datetime(stock_data['Date'], utc=True)
 
     # Run the analysis
-    predict_linear(ticker, covid_data, stock_data)
-    predict_logistic(ticker, covid_data, stock_data)
+    predict_linear(covid_data, stock_data)
+    predict_logistic(covid_data, stock_data)
 
     # Comparison
     plot_covid_and_stock(covid_data, stock_data)
