@@ -25,6 +25,9 @@ data_comb <- (list.files(path = '~/Desktop/ITWS-4350-Project/Stock Data', patter
      }) 
      %>% bind_rows)
 
+covid_dat <- read.csv('COVID Data/filtered_us_covid_data.csv')
+covid_dat$date <- as.Date(covid_dat$date)
+
 ggplot(data=data_comb, aes(x=Close)) + 
   geom_boxplot() + 
   facet_wrap( ~stockName, scales="free") + 
@@ -34,18 +37,14 @@ ggplot(data=data_comb, aes(x=Close)) +
 ggplot(data=data_comb, aes(x=Date)) + 
   geom_line(aes(y=Close), color="blue") + 
   facet_wrap(~stockName, scales="free") + 
-  scale_y_continuous(name="Close", sec.axis=sec_axis(~./1, name="stock prices at close")) +
-  geom_line(data=covid_dat, aes(x = date, y=new_cases_smoothed)) +
-
   theme_classic()
 
 data_comb %>% group_by(stockName) %>% summarise(mean=mean(Close), median=median(Close), sd=sd(Close), range=max(Close)-min(Close))
 
 
-covid_dat <- read.csv('COVID Data/filtered_us_covid_data.csv')
 
 plot(covid_dat$date, covid_dat$new_cases_smoothed)
-covid_dat$date <- as.Date(covid_dat$date)
+
 ggplot(data=covid_dat, aes(x=date, y=new_cases_smoothed)) +
     geom_line(color="blue")+
     theme_classic() +
